@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CropGuard - Early Detection & Management of Crop Diseases</title>
+  
+  <!-- PWA Manifest & Meta -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#16a34a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Mobile-first touch-friendly design */
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .pulse-mic {
+      animation: mic-pulse 1.6s infinite;
+    }
+    @keyframes mic-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
+      70% { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    }
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- ================= TOP NOTIFICATION / DEMO BAR ================= -->
+  <div id="demo-banner" class="bg-amber-600 text-white text-xs py-1.5 px-4 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-2">
+      <span class="bg-amber-800 px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[10px]">Judge Demo Mode</span>
+      <span id="txt-demo-status">Village Outbreak Simulator (F23) is ready. Inject a report to observe real-time map recoloring.</span>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="openSimulationModal()" class="bg-white text-amber-900 font-semibold px-2.5 py-0.5 rounded text-xs hover:bg-amber-50 transition shadow-sm">
+        ⚡ Inject Outbreak (F23)
+      </button>
+      <button onclick="resetSimulations()" title="Reset all simulated data" class="bg-amber-800 hover:bg-amber-900 text-amber-100 px-2 py-0.5 rounded text-xs transition">
+        Reset
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= HEADER NAVBAR ================= -->
+  <header class="bg-brand-800 text-white shadow-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('scan')">
+        <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-inner">
+          <i data-lucide="shield-alert" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-xl tracking-tight">CropGuard</span>
+            <span class="bg-brand-900 text-brand-200 text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase">v0.2</span>
+            <span class="hidden sm:flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>Gemini Live AI Active</span>
+            </span>
+          </div>
+          <p class="text-[11px] text-brand-200 hidden sm:block">AI Early Detection & Crop Loss Prevention • Google Gemini Real-Time</p>
+        </div>
+      </div>
+
+      <!-- Controls & Language Toggle -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Language Switcher -->
+        <button onclick="toggleLanguage()" class="flex items-center space-x-1.5 bg-brand-700 hover:bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium border border-brand-600 transition shadow-sm">
+          <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+          <span id="lang-btn-text">हिंदी (HI)</span>
+        </button>
+
+        <!-- Offline Status -->
+        <div id="offline-pill" class="hidden sm:flex items-center space-x-1 bg-brand-900/60 text-brand-200 px-2.5 py-1.5 rounded-lg text-xs border border-brand-700/50">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="txt-online-status">Online (Synced)</span>
+        </div>
+
+        <!-- Alert Bell -->
+        <button onclick="toggleAlertsDrawer()" class="relative p-2 rounded-lg bg-brand-700 hover:bg-brand-600 text-white transition">
+          <i data-lucide="bell" class="w-4 h-4"></i>
+          <span id="alert-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow">2</span>
+        </button>
+
+        <!-- User Profile Chip with Click to Login / Switch Location -->
+        <button onclick="openLoginModal()" id="user-profile-chip" title="Click to view farm profile & change GPS location" class="flex items-center space-x-2 bg-brand-900/90 hover:bg-brand-800 transition px-2.5 py-1.5 rounded-xl border border-brand-700/60 text-xs shadow-sm">
+          <div id="user-initials-badge" class="w-6 h-6 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[11px] shrink-0">R</div>
+          <div class="text-left leading-tight hidden sm:block">
+            <div id="user-header-name" class="font-semibold text-white">Ramesh Patel</div>
+            <div id="user-header-location" class="text-[10px] text-brand-300 flex items-center space-x-0.5">
+              <span>📍</span>
+              <span id="user-header-district">Nashik, MH</span>
+            </div>
+          </div>
+          <span class="text-[10px] text-emerald-400 font-bold ml-1 hidden md:inline">Change</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Active Field Selector Bar -->
+    <div class="bg-brand-900/90 border-t border-brand-700/60 px-4 py-2 text-xs flex items-center justify-between overflow-x-auto">
+      <div class="flex items-center space-x-2 min-w-max">
+        <span class="text-brand-300 font-medium" id="lbl-active-field">Selected Field:</span>
+        <select id="field-selector" onchange="onFieldChange()" class="bg-brand-800 text-white font-semibold rounded px-2.5 py-1 text-xs border border-brand-600 focus:outline-none focus:ring-1 focus:ring-emerald-400">
+          <option value="loading">Loading fields...</option>
+        </select>
+        <span id="field-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500 text-white">Watch</span>
+      </div>
+      <div class="flex items-center space-x-3 text-brand-200 text-[11px] min-w-max ml-4">
+        <span>🌤️ 24.5°C</span>
+        <span>💧 Humidity: 88%</span>
+        <span class="text-red-300 font-semibold">⚠️ Red Risk Zone</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= NOTIFICATION DRAWER ================= -->
+  <div id="alerts-drawer" class="hidden fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-white shadow-2xl flex flex-col border-l border-slate-200">
+    <div class="p-4 bg-slate-900 text-white flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i data-lucide="bell-ring" class="w-5 h-5 text-amber-400"></i>
+        <h3 class="font-bold text-sm" id="lbl-drawer-title">Risk Alerts & Outbreak Warnings</h3>
+      </div>
+      <button onclick="toggleAlertsDrawer()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div id="alerts-list" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
+      <!-- Alerts populated dynamically -->
+      <div class="text-xs text-slate-500 text-center py-8">Loading alerts...</div>
+    </div>
+  </div>
+
+  <!-- ================= NAVIGATION TABS ================= -->
+  <div class="bg-white border-b border-slate-200 sticky top-[95px] z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-2 flex space-x-1 sm:space-x-2 overflow-x-auto custom-scroll">
+      <button onclick="switchTab('scan')" id="tab-btn-scan" class="tab-btn active px-3.5 py-3 text-xs sm:text-sm font-semibold border-b-2 border-brand-600 text-brand-700 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="scan-line" class="w-4 h-4"></i>
+        <span id="tab-txt-scan">Diagnose & Scan (F1-F3)</span>
+      </button>
+
+      <button onclick="switchTab('radar')" id="tab-btn-radar" class="tab-btn px-3.5 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-brand-600 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="radar" class="w-4 h-4"></i>
+        <span id="tab-txt-radar">Outbreak Radar (F15)</span>
+      </button>
+
+      <button onclick="switchTab('risk')" id="tab-btn-risk" class="tab-btn px-3.5 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-brand-600 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        <span id="tab-txt-risk">Weather Risk & What-If (F16)</span>
+      </button>
+
+      <button onclick="switchTab('fields')" id="tab-btn-fields" class="tab-btn px-3.5 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-brand-600 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="sprout" class="w-4 h-4"></i>
+        <span id="tab-txt-fields">My Fields & Scenarios (F19, F22)</span>
+      </button>
+
+      <button onclick="switchTab('community')" id="tab-btn-community" class="tab-btn px-3.5 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-brand-600 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        <span id="tab-txt-community">Crop Rescue & Expert (F20)</span>
+      </button>
+
+      <button onclick="switchTab('market')" id="tab-btn-market" class="tab-btn px-3.5 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-brand-600 flex items-center space-x-1.5 whitespace-nowrap">
+        <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+        <span id="tab-txt-market">Market & Sensors (F12-F14)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MAIN CONTENT CONTAINER ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+
+    <!-- ============================================================== -->
+    <!-- TAB 1: DIAGNOSE & SCAN (F1, F2, F3, F4, F17, F18)             -->
+    <!-- ============================================================== -->
+    <div id="tab-scan" class="tab-content space-y-6">
+      
+      <!-- Voice SOS Banner / Quick Trigger (F18) -->
+      <div class="bg-gradient-to-r from-emerald-800 to-brand-900 rounded-2xl p-4 sm:p-6 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center space-x-4">
+          <button onclick="openVoiceSosModal()" class="w-14 h-14 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg transition transform hover:scale-105 pulse-mic flex-shrink-0">
+            <i data-lucide="mic" class="w-7 h-7"></i>
+          </button>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h2 class="text-base sm:text-lg font-bold" id="lbl-voice-sos-title">Kisan Voice SOS (किसान वॉइस सहायता)</h2>
+              <span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">F18 Active</span>
+            </div>
+            <p class="text-xs sm:text-sm text-emerald-100" id="lbl-voice-sos-desc">Speak your crop problem in Hindi or English. Get instant follow-ups and voice diagnosis.</p>
+          </div>
+        </div>
+        <button onclick="openVoiceSosModal()" class="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center space-x-2">
+          <i data-lucide="volume-2" class="w-4 h-4 text-emerald-300"></i>
+          <span id="btn-open-voice">बोलकर पूछें (Voice Search)</span>
+        </button>
+      </div>
+
+      <!-- Main Leaf Capture Card -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Image Input & Settings (5 Cols) -->
+        <div class="lg:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="font-bold text-slate-800 flex items-center space-x-2">
+              <i data-lucide="camera" class="w-5 h-5 text-brand-600"></i>
+              <span id="lbl-leaf-photo">Upload Crop Picture</span>
+            </h3>
+            <span class="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold border border-emerald-200" id="lbl-core-flow">Gemini Vision Ready</span>
+          </div>
+
+          <!-- Leaf Preview Frame -->
+          <div class="relative w-full aspect-square max-h-[300px] rounded-xl overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center group cursor-pointer hover:border-brand-500 hover:bg-slate-100/50 transition" onclick="document.getElementById('leaf-file-input').click()">
+            <img id="leaf-preview" src="" alt="Leaf Preview" class="hidden w-full h-full object-contain">
+            <div id="leaf-placeholder" class="flex flex-col items-center justify-center text-slate-400 p-6 text-center space-y-2">
+              <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
+                <i data-lucide="image-plus" class="w-8 h-8"></i>
+              </div>
+              <div>
+                <p class="font-bold text-slate-800 text-sm">Upload Photo of Crop Leaf</p>
+                <p class="text-xs text-slate-500 mt-1">Tap here to choose from camera or gallery</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Supports any plant crop (Tomato, Potato, Wheat, Cotton, etc.)</p>
+              </div>
+            </div>
+            <div id="preview-tag-badge" class="hidden absolute bottom-2 right-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
+              <span id="preview-tag">Crop Image Ready</span>
+            </div>
+          </div>
+
+          <!-- File Upload Buttons -->
+          <div class="space-y-3">
+            <input type="file" id="leaf-file-input" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+            
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="document.getElementById('leaf-file-input').click()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs py-3 px-3 rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="upload" class="w-4 h-4 text-white"></i>
+                <span id="btn-upload-leaf">Upload Picture</span>
+              </button>
+              <button onclick="triggerCameraCapture()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs py-3 px-3 rounded-xl border border-slate-300 transition flex items-center justify-center space-x-1.5">
+                <i data-lucide="camera" class="w-4 h-4 text-brand-600"></i>
+                <span id="btn-take-leaf">Take Photo</span>
+              </button>
+            </div>
+
+            <!-- Optional Test Samples (Collapsible) -->
+            <details class="text-[11px] text-slate-500 border border-slate-200 rounded-xl p-2.5 bg-slate-50/50">
+              <summary class="font-semibold text-slate-700 cursor-pointer select-none flex items-center justify-between">
+                <span>Or select a test sample leaf</span>
+                <span class="text-[10px] text-slate-400">Click to expand</span>
+              </summary>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-2">
+                <button onclick="selectSampleLeaf('tomato_early_blight', 'Tomato Early Blight')" class="p-1.5 bg-white hover:bg-brand-50 border border-slate-200 rounded-lg text-left truncate font-medium text-slate-700 transition">
+                  🍅 Early Blight
+                </button>
+                <button onclick="selectSampleLeaf('tomato_late_blight', 'Tomato Late Blight')" class="p-1.5 bg-white hover:bg-brand-50 border border-slate-200 rounded-lg text-left truncate font-medium text-slate-700 transition">
+                  🍅 Late Blight
+                </button>
+                <button onclick="selectSampleLeaf('tomato_leaf_curl', 'Tomato Leaf Curl')" class="p-1.5 bg-white hover:bg-brand-50 border border-slate-200 rounded-lg text-left truncate font-medium text-slate-700 transition">
+                  🍃 Leaf Curl
+                </button>
+                <button onclick="selectSampleLeaf('tomato_healthy', 'Healthy Leaf')" class="p-1.5 bg-white hover:bg-brand-50 border border-slate-200 rounded-lg text-left truncate font-medium text-slate-700 transition">
+                  ✅ Healthy Leaf
+                </button>
+                <button onclick="selectSampleLeaf('potato_late_blight', 'Potato Late Blight')" class="p-1.5 bg-white hover:bg-brand-50 border border-slate-200 rounded-lg text-left truncate font-medium text-slate-700 transition">
+                  🥔 Potato Blight
+                </button>
+              </div>
+            </details>
+
+            <!-- Big Run Diagnosis Button -->
+            <button onclick="runDiagnosis()" id="btn-run-diagnosis" class="w-full bg-gradient-to-r from-emerald-600 to-brand-700 hover:from-emerald-700 hover:to-brand-800 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-lg shadow-brand-600/25 transition transform active:scale-[0.99] flex items-center justify-center space-x-2">
+              <i data-lucide="sparkles" class="w-5 h-5 text-emerald-200"></i>
+              <span id="btn-text-analyze">Detect Problem & Get Solution (समस्या व समाधान जानें)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Diagnosis Result, Severity & ICAR Treatments (7 Cols) -->
+        <div class="lg:col-span-7 space-y-4">
+
+          <!-- Empty State (Shown before any photo is uploaded) -->
+          <div id="diagnosis-empty-state" class="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4 min-h-[420px]">
+            <div class="w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-100 flex items-center justify-center text-emerald-600 shadow-inner">
+              <i data-lucide="leaf" class="w-10 h-10"></i>
+            </div>
+            <div class="max-w-md space-y-1">
+              <h3 class="text-lg font-bold text-slate-900" id="lbl-empty-title">Ready for Live Crop Diagnosis</h3>
+              <p class="text-xs text-slate-500 leading-relaxed" id="lbl-empty-desc">
+                Upload or take a photo of an affected plant leaf. Google Gemini Vision will examine the image in real time to detect the exact disease, measure severity, and provide ICAR verified organic and chemical solutions.
+              </p>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-lg pt-2 text-left">
+              <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-black flex items-center justify-center mb-1.5">1</span>
+                <div class="font-bold text-slate-800 text-xs">Upload Photo</div>
+                <div class="text-[10px] text-slate-500">Capture diseased leaf with camera</div>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-black flex items-center justify-center mb-1.5">2</span>
+                <div class="font-bold text-slate-800 text-xs">Gemini Detects</div>
+                <div class="text-[10px] text-slate-500">Pathogen, severity %, & symptoms</div>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-black flex items-center justify-center mb-1.5">3</span>
+                <div class="font-bold text-slate-800 text-xs">Get Solutions</div>
+                <div class="text-[10px] text-slate-500">Organic bio-sprays & CIBRC doses</div>
+              </div>
+            </div>
+
+            <button onclick="document.getElementById('leaf-file-input').click()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-5 py-3 rounded-xl shadow transition flex items-center space-x-2 mt-2">
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              <span>Upload Picture to Detect</span>
+            </button>
+          </div>
+
+          <!-- Loading State (Shown while Gemini is analyzing) -->
+          <div id="diagnosis-loading-state" class="hidden bg-white rounded-2xl p-10 border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center space-y-4 min-h-[420px]">
+            <div class="relative w-20 h-20">
+              <div class="w-20 h-20 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <i data-lucide="sparkles" class="w-8 h-8 text-emerald-600 animate-pulse"></i>
+              </div>
+            </div>
+            <div class="space-y-1">
+              <h3 class="text-base font-bold text-slate-900">Analyzing with Google Gemini Vision...</h3>
+              <p class="text-xs text-slate-500 max-w-sm" id="loading-status-text">Detecting crop pathogen markers, lesion patterns, and calculating severity %</p>
+            </div>
+            <div class="flex items-center space-x-2 text-[11px] text-indigo-700 font-semibold bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-200">
+              <span class="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span>
+              <span>Gemini 3.5 Multimodal Live Processing</span>
+            </div>
+          </div>
+
+          <!-- Result Card (Hidden until an image is analyzed) -->
+          <div id="diagnosis-result-card" class="hidden bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+            
+            <!-- Result Header with Confidence & TTS Speaker -->
+            <div class="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <div class="flex items-center space-x-2 mb-1">
+                  <span id="diag-category-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-100 text-purple-800">Fungal Pathogen</span>
+                  <span id="diag-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">Confident Diagnosis</span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center space-x-1">
+                    <span>✨</span>
+                    <span>Gemini Live Vision</span>
+                  </span>
+                </div>
+                <h3 id="diag-disease-name" class="text-xl sm:text-2xl font-black text-slate-900">Tomato Early Blight</h3>
+                <p id="diag-disease-scientific" class="text-xs italic text-slate-500">Alternaria solani</p>
+                <p id="diag-disease-hindi" class="text-xs text-brand-800 font-semibold mt-0.5">टमाटर अगेती झुलसा</p>
+              </div>
+
+              <!-- Read Aloud TTS Button (F4, FR-2.7) -->
+              <button onclick="speakDiagnosisAdvice()" title="Read aloud in selected language" class="flex items-center space-x-1.5 bg-brand-50 hover:bg-brand-100 text-brand-800 px-3 py-2 rounded-xl border border-brand-200 transition shadow-sm">
+                <i data-lucide="volume-2" class="w-4 h-4 text-brand-600"></i>
+                <span class="text-xs font-bold" id="btn-read-aloud">बोलकर सुनें</span>
+              </button>
+            </div>
+
+            <!-- Severity & Confidence Metrics Grid (F1, F2) -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <!-- Severity Gauge Card -->
+              <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1" id="lbl-severity-header">Severity Level</div>
+                <div class="flex items-baseline space-x-2">
+                  <span id="diag-severity-badge" class="text-base font-black px-2 py-0.5 rounded uppercase bg-amber-500 text-white">Moderate</span>
+                  <span id="diag-severity-pct" class="text-xs text-slate-600 font-bold">18.4% Leaf Area</span>
+                </div>
+                <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div id="severity-bar" class="bg-amber-500 h-full rounded-full transition-all duration-700" style="width: 35%"></div>
+                </div>
+              </div>
+
+              <!-- Confidence Metric Card -->
+              <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1" id="lbl-confidence-header">AI Confidence</div>
+                <div class="text-xl font-black text-brand-700" id="diag-confidence-pct">91.4%</div>
+                <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div id="confidence-bar" class="bg-brand-600 h-full rounded-full transition-all duration-700" style="width: 91%"></div>
+                </div>
+              </div>
+
+              <!-- Followup Reminder Card -->
+              <div class="col-span-2 sm:col-span-1 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1" id="lbl-followup-header">Follow-up Scan</div>
+                <div class="text-xs font-bold text-slate-800" id="diag-followup-date">In 7 Days (Nov 3)</div>
+                <span class="text-[10px] text-emerald-700 font-medium">Scheduled in Passport</span>
+              </div>
+            </div>
+
+            <!-- Symptoms Description -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
+              <span class="font-bold text-slate-900" id="lbl-symptoms-title">Identified Symptoms: </span>
+              <span id="diag-symptoms-text">Concentric dark brown target-like rings on older leaves, surrounded by yellow chlorotic halo. Causes premature leaf fall.</span>
+            </div>
+
+            <!-- Second Opinion Trigger Banner (When Uncertain) -->
+            <div id="banner-second-opinion" class="hidden bg-amber-50 border-2 border-amber-300 p-4 rounded-xl space-y-2">
+              <div class="flex items-center space-x-2 text-amber-900 font-bold text-sm">
+                <i data-lucide="help-circle" class="w-5 h-5 text-amber-600"></i>
+                <span id="lbl-uncertain-title">Uncertain Diagnosis (Confidence < 60%)</span>
+              </div>
+              <p class="text-xs text-amber-800" id="lbl-uncertain-desc">The model detected ambiguous features. As per safety rules, we do not show definitive pesticide advice without multi-evidence verification.</p>
+              <div class="flex space-x-2 pt-1">
+                <button onclick="openSecondOpinionModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-2 rounded-lg transition shadow-sm">
+                  🔍 Start AI Second Opinion (F17)
+                </button>
+                <button onclick="escalateToExpert()" class="bg-white text-slate-700 hover:bg-slate-100 font-semibold text-xs px-3 py-2 rounded-lg border border-slate-300 transition">
+                  👨‍🌾 Escalate to KVK Expert (F11)
+                </button>
+              </div>
+            </div>
+
+            <!-- Multi-Tier Treatment Advice (F3) -->
+            <div id="treatments-section" class="space-y-3 pt-2">
+              <div class="flex items-center justify-between">
+                <h4 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                  <i data-lucide="shield-check" class="w-4 h-4 text-brand-600"></i>
+                  <span id="lbl-treatments-title">Verified Agronomic Treatments (ICAR Guidelines)</span>
+                </h4>
+                <span class="text-[10px] text-slate-500 font-medium">Prevention-First</span>
+              </div>
+
+              <!-- Treatment Tabs: Organic vs Chemical vs Cultural -->
+              <div class="space-y-2.5" id="treatment-cards-container">
+                <!-- Treatment cards injected dynamically -->
+              </div>
+            </div>
+
+            <!-- Feedback Loop & Action Footer (FR-2.8, F21) -->
+            <div class="border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-1.5 text-xs text-slate-600">
+                <span class="font-medium" id="lbl-feedback-ask">Confirm Diagnosis:</span>
+                <button onclick="submitFeedback('correct')" class="bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 px-2 py-1 rounded text-xs font-semibold transition border border-slate-200">✅ Correct</button>
+                <button onclick="submitFeedback('incorrect')" class="bg-slate-100 hover:bg-red-50 hover:text-red-700 text-slate-700 px-2 py-1 rounded text-xs font-semibold transition border border-slate-200">❌ Incorrect</button>
+                <button onclick="submitFeedback('unsure')" class="bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-700 px-2 py-1 rounded text-xs font-semibold transition border border-slate-200">❓ Unsure</button>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                <button onclick="generatePlanFromScan()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition flex items-center space-x-1">
+                  <i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>
+                  <span id="btn-create-plan">Smart Plan (F21)</span>
+                </button>
+                <button onclick="openSprayLogModal()" class="bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition flex items-center space-x-1">
+                  <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                  <span id="btn-log-spray">Log Spray (F9)</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: OUTBREAK RADAR & COMMUNITY MAP (F7, F15, F23)           -->
+    <!-- ============================================================== -->
+    <div id="tab-radar" class="tab-content hidden space-y-4">
+      
+      <!-- Gated Radar Policy Alert Banner -->
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-3.5 rounded-r-xl text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-sm">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="shield-alert" class="w-5 h-5 text-amber-600 shrink-0"></i>
+          <span><strong>Radar Alerting Policy:</strong> Warning alerts require at least <strong>3 verified field reports</strong> in a 1km cluster to trigger regional notifications and prevent false alarms from single unverified scans.</span>
+        </div>
+        <span class="text-[10px] font-bold bg-amber-200 text-amber-800 px-2.5 py-1 rounded-full whitespace-nowrap">Anti-Spam Threshold &ge; 3</span>
+      </div>
+
+      <!-- Top Radar Summary Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase">Confirmed Reports</div>
+          <div class="text-2xl font-black text-red-600" id="radar-confirmed-count">14</div>
+          <p class="text-[10px] text-slate-500">Expert / Farmer Verified</p>
+        </div>
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase">Suspected Reports</div>
+          <div class="text-2xl font-black text-amber-600" id="radar-suspected-count">8</div>
+          <p class="text-[10px] text-slate-500">Model Scan Only</p>
+        </div>
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase">7-Day Outbreak Trend</div>
+          <div class="text-lg font-black text-red-600 flex items-center space-x-1" id="radar-trend-text">
+            <span>📈 Rising (+35%)</span>
+          </div>
+          <p class="text-[10px] text-slate-500">Compared to prev week</p>
+        </div>
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase">Active Alerts</div>
+          <div class="text-2xl font-black text-brand-700" id="radar-alerts-count">3</div>
+          <p class="text-[10px] text-slate-500">Dispatched to growers</p>
+        </div>
+      </div>
+
+      <!-- Map Card with Filters -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <i data-lucide="map-pin" class="w-4 h-4 text-brand-600"></i>
+              <span id="lbl-radar-title">Community Outbreak Radar (1 km Grid Snapped)</span>
+            </h3>
+            <p class="text-[11px] text-slate-500">Green = Low risk, Amber = Moderate/Weather risk, Red = High cluster density</p>
+          </div>
+
+          <!-- Filters -->
+          <div class="flex items-center space-x-2">
+            <select id="radar-filter-crop" onchange="loadOutbreakRadar()" class="bg-white border border-slate-300 rounded-lg text-xs px-2.5 py-1.5 focus:outline-none">
+              <option value="">All Crops</option>
+              <option value="tomato" selected>Tomato</option>
+              <option value="potato">Potato</option>
+              <option value="cotton">Cotton</option>
+              <option value="wheat">Wheat</option>
+            </select>
+            <select id="radar-filter-days" onchange="loadOutbreakRadar()" class="bg-white border border-slate-300 rounded-lg text-xs px-2.5 py-1.5 focus:outline-none">
+              <option value="7">Last 7 Days</option>
+              <option value="14" selected>Last 14 Days</option>
+              <option value="30">Last 30 Days</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Leaflet Map Container -->
+        <div id="radar-map" class="w-full h-[450px] bg-slate-100 z-10"></div>
+
+        <!-- Legend Footer -->
+        <div class="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2">
+          <div class="flex items-center space-x-4">
+            <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> <span>Red Zone (High Cluster)</span></span>
+            <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> <span>Amber Zone (Moderate)</span></span>
+            <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> <span>Green Zone (Normal)</span></span>
+          </div>
+          <div class="text-[11px] text-slate-500 italic">
+            Locations anonymized to ~1km grid per privacy protocol (FR-6.1)
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 3: EARLY RISK & WHAT-IF SIMULATOR (F6, F16)                -->
+    <!-- ============================================================== -->
+    <div id="tab-risk" class="tab-content hidden space-y-6">
+
+      <!-- Current Microclimate & Risk Meter -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        
+        <!-- Risk Gauge Card (5 Cols) -->
+        <div class="md:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <i data-lucide="gauge" class="w-4 h-4 text-brand-600"></i>
+              <span id="lbl-risk-meter-title">Field Weather Risk Score</span>
+            </h3>
+            <span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase" id="risk-level-badge">High Risk</span>
+          </div>
+
+          <!-- Circular Score Display -->
+          <div class="flex flex-col items-center justify-center py-4">
+            <div class="relative w-40 h-40 flex items-center justify-center">
+              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <path class="text-slate-100" stroke-width="3.5" stroke="currentColor" fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path id="risk-circle-path" class="text-red-500 transition-all duration-1000" stroke-dasharray="78, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              </svg>
+              <div class="absolute flex flex-col items-center justify-center">
+                <span class="text-4xl font-black text-slate-900" id="txt-risk-score">78</span>
+                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">/ 100 Risk</span>
+              </div>
+            </div>
+            <p class="text-xs text-red-700 font-bold mt-2 text-center" id="risk-targeted-pathogen">Target Pathogen: Tomato Late Blight</p>
+          </div>
+
+          <!-- Microclimate Snapshot -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-slate-500 text-[10px] block">Air Temperature</span>
+              <span class="font-bold text-slate-800" id="txt-weather-temp">24.5 °C (Optimal)</span>
+            </div>
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-slate-500 text-[10px] block">Relative Humidity</span>
+              <span class="font-bold text-red-600" id="txt-weather-humidity">88% (Critical)</span>
+            </div>
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-slate-500 text-[10px] block">Rainfall (Past 24h)</span>
+              <span class="font-bold text-slate-800" id="txt-weather-rain">12.4 mm</span>
+            </div>
+            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <span class="text-slate-500 text-[10px] block">Leaf Wetness</span>
+              <span class="font-bold text-red-600" id="txt-weather-wetness">5.5 Hours</span>
+            </div>
+          </div>
+
+          <!-- Honesty Rule Label (PRD 3.2) -->
+          <div class="bg-slate-100 p-2.5 rounded-xl text-[10px] text-slate-600 text-center font-medium border border-slate-200">
+            ⚠️ <b>Honesty Rule:</b> Labelled strictly as a <u>risk estimate</u>, not a diagnosis or guaranteed forecast.
+          </div>
+        </div>
+
+        <!-- Contributing Factors Breakdown (7 Cols) -->
+        <div class="md:col-span-7 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <i data-lucide="layers" class="w-4 h-4 text-brand-600"></i>
+              <span id="lbl-factors-title">Top Contributing Factors Behind Risk</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">Wallin Advisory Model</span>
+          </div>
+
+          <div class="space-y-3" id="factors-list-container">
+            <!-- Contributing factors dynamically populated -->
+            <div class="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3">
+              <div class="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">+35%</div>
+              <div>
+                <h4 class="font-bold text-xs text-red-950">Relative Humidity (88%)</h4>
+                <p class="text-xs text-red-800">Persistent moisture > 85% for 48 hours provides necessary free water film for zoospore germination.</p>
+              </div>
+            </div>
+
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start space-x-3">
+              <div class="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">+25%</div>
+              <div>
+                <h4 class="font-bold text-xs text-amber-950">Temperature Window (21.5°C)</h4>
+                <p class="text-xs text-amber-800">12°C to 24°C is the optimal thermal range for Phytophthora mycelial proliferation.</p>
+              </div>
+            </div>
+
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start space-x-3">
+              <div class="w-8 h-8 rounded-lg bg-slate-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">+18%</div>
+              <div>
+                <h4 class="font-bold text-xs text-slate-900">Crop Canopy Age (38 Days Vegetative)</h4>
+                <p class="text-xs text-slate-600">Dense leaf canopy shades soil, retaining humidity and reducing airflow in lower branches.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- What-If Weather Simulator (F16) -->
+      <div class="bg-gradient-to-br from-slate-900 to-brand-950 rounded-2xl p-5 sm:p-6 text-white shadow-xl space-y-6">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-white/10 pb-4">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-lg font-black tracking-tight" id="lbl-whatif-title">Early Risk Predictor: What-If Simulator</h3>
+              <span class="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">F16 Innovation</span>
+            </div>
+            <p class="text-xs text-slate-300">Adjust micro-meteorological sliders to observe estimated disease risk response in real time.</p>
+          </div>
+          <div class="bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 text-xs font-mono">
+            <span id="whatif-score-badge" class="font-bold text-amber-400">Simulated Risk: 78 / 100</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          <!-- Slider 1: Temperature -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300">Temperature (°C)</span>
+              <span id="val-slider-temp" class="font-bold text-emerald-300 font-mono text-sm">22.0 °C</span>
+            </div>
+            <input type="range" id="slider-temp" min="10" max="38" step="0.5" value="22" oninput="runWhatIfSimulation()" class="w-full accent-emerald-500 cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>10°C (Cold)</span>
+              <span>24°C (Optimum)</span>
+              <span>38°C (Hot)</span>
+            </div>
+          </div>
+
+          <!-- Slider 2: Relative Humidity -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300">Relative Humidity (%)</span>
+              <span id="val-slider-humidity" class="font-bold text-emerald-300 font-mono text-sm">88 %</span>
+            </div>
+            <input type="range" id="slider-humidity" min="30" max="100" step="1" value="88" oninput="runWhatIfSimulation()" class="w-full accent-emerald-500 cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>30% (Dry)</span>
+              <span>75% (Moderate)</span>
+              <span>100% (Saturated)</span>
+            </div>
+          </div>
+
+          <!-- Slider 3: Rainfall -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300">Rainfall (mm)</span>
+              <span id="val-slider-rain" class="font-bold text-emerald-300 font-mono text-sm">12.0 mm</span>
+            </div>
+            <input type="range" id="slider-rain" min="0" max="50" step="1" value="12" oninput="runWhatIfSimulation()" class="w-full accent-emerald-500 cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>0 mm (Clear)</span>
+              <span>15 mm (Shower)</span>
+              <span>50 mm (Heavy)</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Simulated Response Box -->
+        <div id="whatif-response-box" class="bg-white/10 border border-white/15 p-4 rounded-xl space-y-2 text-xs">
+          <div class="font-bold text-emerald-300 flex items-center space-x-1.5">
+            <i data-lucide="info" class="w-4 h-4"></i>
+            <span id="whatif-advisory-title">Estimated Agronomic Risk Outcome: HIGH (78/100)</span>
+          </div>
+          <p class="text-slate-200" id="whatif-advisory-desc">
+            With humidity >85% and temperatures near 22°C, late blight sporulation will proceed rapidly. Prophylactic bio-spray (Trichoderma or Copper Oxychloride) recommended before moisture events.
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 4: MY FIELDS, DIGITAL TWIN & HEALTH PASSPORT (F5, F19, F21, F22, F24) -->
+    <!-- ============================================================== -->
+    <div id="tab-fields" class="tab-content hidden space-y-6">
+
+      <!-- Crop Weather Scenario Simulator & Inspection Priority (F19 - Simulated) -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-slate-900 text-base" id="lbl-twin-title">Crop Weather Scenario Simulator & Inspection Priority (F19 - Simulated)</h3>
+              <span class="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">F19 - Simulated</span>
+            </div>
+            <p class="text-xs text-slate-500">Ranks your fields by urgent inspection priority based on recent scans, symptoms, and microclimate vulnerability. <em>(Simulated multi-factor priority index)</em></p>
+          </div>
+          <button onclick="openNewFieldModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add New Field</span>
+          </button>
+        </div>
+
+        <!-- Priority Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] border-y border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">Field Name</th>
+                <th class="py-2.5 px-3">Crop & Variety</th>
+                <th class="py-2.5 px-3">Priority Level</th>
+                <th class="py-2.5 px-3">Reasoning / Risk Driver</th>
+                <th class="py-2.5 px-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="field-priority-tbody" class="divide-y divide-slate-100">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Smart Treatment Planner (F21) & Loss-Avoidance Calculator (F24) Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Smart Treatment Planner (7 Cols) -->
+        <div class="lg:col-span-7 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <div class="flex items-center space-x-2">
+                <h3 class="font-bold text-slate-900 text-sm">Smart Treatment Planner (Stepwise IPM)</h3>
+                <span class="bg-brand-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">F21</span>
+              </div>
+              <p class="text-[11px] text-slate-500">5-step prevention plan: Inspect → Sanitation → Cultural → Organic → Chemical</p>
+            </div>
+            <div class="text-right text-xs">
+              <span class="text-slate-500 block text-[10px]">Total Cost</span>
+              <span class="font-bold text-slate-900" id="plan-cost-display">Est: ₹1,280 / Act: ₹420</span>
+            </div>
+          </div>
+
+          <!-- Stepwise Checklist -->
+          <div class="space-y-2.5" id="plan-steps-container">
+            <!-- Dynamic steps -->
+          </div>
+        </div>
+
+        <!-- Loss-Avoidance Calculator (5 Cols - F24) -->
+        <div class="lg:col-span-5 bg-gradient-to-br from-brand-900 to-slate-900 rounded-2xl p-5 text-white shadow-md space-y-4">
+          <div class="border-b border-white/10 pb-3">
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-sm text-white">Loss-Avoidance Calculator</h3>
+              <span class="bg-amber-500 text-slate-900 text-[10px] font-bold px-2 py-0.5 rounded uppercase">F24</span>
+            </div>
+            <p class="text-[11px] text-brand-200">Compares early response vs delayed treatment savings grounded in ICAR loss brackets.</p>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1 text-[11px]">ICAR Benchmark Disease Model:</label>
+              <select id="loss-benchmark-disease" onchange="applyLossBenchmark()" class="w-full bg-slate-800 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-emerald-400">
+                <option value="tomato_early_blight" selected>Tomato Early Blight (5% early → 25% delayed loss)</option>
+                <option value="tomato_late_blight">Tomato Late Blight (10% early → 65% delayed loss)</option>
+                <option value="potato_late_blight">Potato Late Blight (12% early → 70% delayed loss)</option>
+                <option value="wheat_rust">Wheat Yellow Rust (8% early → 45% delayed loss)</option>
+                <option value="abiotic">Nutrient Deficiency (3% early → 15% delayed loss)</option>
+              </select>
+            </div>
+
+            <div>
+              <div class="flex justify-between mb-1 text-[11px]">
+                <span class="text-slate-300">Expected Crop Value:</span>
+                <span id="val-loss-cropval" class="font-mono font-bold text-emerald-300">₹ 150,000</span>
+              </div>
+              <input type="range" id="input-crop-value" min="20000" max="500000" step="10000" value="150000" oninput="recalculateLossSavings()" class="w-full accent-emerald-400">
+            </div>
+
+            <div>
+              <div class="flex justify-between mb-1 text-[11px]">
+                <span class="text-slate-300">Treatment Cost (Sprays + Labor):</span>
+                <span id="val-loss-treatcost" class="font-mono font-bold text-emerald-300">₹ 1,800</span>
+              </div>
+              <input type="range" id="input-treat-cost" min="500" max="10000" step="100" value="1800" oninput="recalculateLossSavings()" class="w-full accent-emerald-400">
+            </div>
+
+            <div>
+              <div class="flex justify-between mb-1 text-[11px]">
+                <span class="text-slate-300">Delay in Treatment (Days):</span>
+                <span id="val-loss-delay" class="font-mono font-bold text-amber-300">6 Days Delay</span>
+              </div>
+              <input type="range" id="input-delay-days" min="1" max="14" step="1" value="6" oninput="recalculateLossSavings()" class="w-full accent-amber-400">
+            </div>
+
+            <!-- Calculated Difference Callout -->
+            <div class="bg-white/10 p-3.5 rounded-xl border border-white/15 space-y-1 text-center">
+              <span class="text-[11px] text-slate-300 block">Estimated Loss Avoided (Net Savings):</span>
+              <div class="text-2xl font-black text-emerald-400 font-mono" id="txt-estimated-savings">₹ 34,200</div>
+              <p class="text-[10px] text-slate-400 italic" id="txt-loss-explanation">Early treatment limits yield loss to 5% vs 28% if delayed.</p>
+            </div>
+
+            <div class="text-[10px] text-slate-400 text-center font-medium">
+              * Grounded in ICAR crop loss research brackets. Not a commercial warranty (PRD 3.2).
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Crop Health Passport Timeline (F22) -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-slate-900 text-base">Crop Health Passport (Field Timeline)</h3>
+              <span class="bg-brand-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">F22</span>
+            </div>
+            <p class="text-xs text-slate-500">Complete chronological audit trail of scans, treatments, risk alerts, and farmer actions.</p>
+          </div>
+          <button onclick="downloadPassportPdf()" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+            <span>Export Official PDF Report</span>
+          </button>
+        </div>
+
+        <!-- Passport Timeline Events -->
+        <div class="relative pl-6 space-y-4 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200" id="passport-timeline-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 5: COMMUNITY RESCUE & EXPERT TICKETS (F20, F11)            -->
+    <!-- ============================================================== -->
+    <div id="tab-community" class="tab-content hidden space-y-6">
+
+      <!-- Sub-tabs: Community SOS Feed vs Expert Portal -->
+      <div class="flex items-center space-x-2 border-b border-slate-200 pb-2">
+        <button onclick="switchCommunitySubTab('feed')" id="btn-sub-feed" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 text-white">
+          🌾 Community Crop Rescue Network (F20)
+        </button>
+        <button onclick="switchCommunitySubTab('expert')" id="btn-sub-expert" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200">
+          👨‍🌾 KVK Agri-Expert Dashboard (F11)
+        </button>
+      </div>
+
+      <!-- View A: Community Feed -->
+      <div id="subtab-feed" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-slate-600">Farmers post symptoms and receive peer and expert-verified treatments with community outcome voting.</p>
+          <button onclick="openNewCommunityReportModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs px-3 py-2 rounded-xl transition shadow-sm">
+            + Post Rescue Request
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="community-reports-container">
+          <!-- Reports injected dynamically -->
+        </div>
+      </div>
+
+      <!-- View B: Expert Tickets Dashboard (F11) -->
+      <div id="subtab-expert" class="hidden space-y-4">
+        <div class="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
+          <div>
+            <h4 class="font-bold text-sm">Dr. Sunita Sharma (Senior Agronomist, ICAR-KVK)</h4>
+            <p class="text-xs text-slate-400">Reviewing escalated uncertain cases and community diagnosis requests.</p>
+          </div>
+          <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Expert Portal Active</span>
+        </div>
+
+        <div class="space-y-3" id="expert-tickets-container">
+          <!-- Tickets injected dynamically -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- TAB 6: MARKETPLACE, DRONE & SENSORS (F12, F13, F14)            -->
+    <!-- ============================================================== -->
+    <div id="tab-market" class="tab-content hidden space-y-6">
+
+      <!-- Supplier Marketplace (F12) -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-slate-900 text-sm">Local Agro-Input Marketplace (Mocked)</h3>
+              <span class="bg-slate-600 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">F12</span>
+            </div>
+            <p class="text-xs text-slate-500">Verified nearby suppliers with current stock of ICAR-recommended pesticides and bio-inputs.</p>
+          </div>
+          <span class="text-xs font-semibold text-brand-700">Nashik District APMC</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="suppliers-container">
+          <!-- Suppliers dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Drone NDVI Survey & IoT Sensors (F13, F14) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Drone Survey Card (F13) -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+              <i data-lucide="plane" class="w-4 h-4 text-brand-600"></i>
+              <span>Whole-Field Drone NDVI Survey (Simulated)</span>
+            </h3>
+            <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">F13</span>
+          </div>
+
+          <div class="relative aspect-video rounded-xl overflow-hidden bg-slate-900 flex items-center justify-center border border-slate-200">
+            <!-- Simulated NDVI Canvas/Heatmap -->
+            <div class="w-full h-full bg-gradient-to-tr from-emerald-600 via-amber-500 to-red-600 opacity-80 flex items-center justify-center p-4">
+              <div class="bg-black/60 p-3 rounded-xl text-center text-white backdrop-blur-sm">
+                <span class="text-xs font-bold block">Multispectral Heatmap (NDVI 0.68 Avg)</span>
+                <span class="text-[10px] text-red-300 font-medium">⚠️ North-West Corner Stress (0.38 NDVI)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-1.5 text-xs">
+            <div class="flex justify-between p-2 rounded-lg bg-red-50 text-red-800">
+              <span class="font-medium">Zone A (North-West)</span>
+              <span class="font-bold">Stressed (NDVI 0.38) - 450 sqm</span>
+            </div>
+            <div class="flex justify-between p-2 rounded-lg bg-amber-50 text-amber-800">
+              <span class="font-medium">Zone B (Central Basin)</span>
+              <span class="font-bold">Moderate (NDVI 0.58) - 1,200 sqm</span>
+            </div>
+            <div class="flex justify-between p-2 rounded-lg bg-emerald-50 text-emerald-800">
+              <span class="font-medium">Zone C (South Ridge)</span>
+              <span class="font-bold">Healthy (NDVI 0.81) - 2,400 sqm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- IoT Sensor Dashboard (F14) -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+          <div class="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+              <i data-lucide="cpu" class="w-4 h-4 text-brand-600"></i>
+              <span>IoT Microclimate Telemetry (Simulated)</span>
+            </h3>
+            <span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">F14</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+              <span class="text-slate-500 text-[10px] block">Soil Moisture Sensor</span>
+              <span class="text-xl font-black text-slate-800 font-mono">64.2 %</span>
+              <span class="text-[10px] text-emerald-600 block mt-1">Adequate Field Capacity</span>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+              <span class="text-slate-500 text-[10px] block">Leaf Wetness Probe</span>
+              <span class="text-xl font-black text-red-600 font-mono">82.0 %</span>
+              <span class="text-[10px] text-red-600 font-bold block mt-1">Danger: High Spore Release</span>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+              <span class="text-slate-500 text-[10px] block">Canopy Temperature</span>
+              <span class="text-xl font-black text-slate-800 font-mono">23.1 °C</span>
+              <span class="text-[10px] text-slate-500 block mt-1">Optimum Fungal Growth</span>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+              <span class="text-slate-500 text-[10px] block">Ambient Humidity</span>
+              <span class="text-xl font-black text-amber-600 font-mono">87.5 %</span>
+              <span class="text-[10px] text-amber-600 block mt-1">Foggy Microclimate</span>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-100 rounded-xl text-[10px] text-slate-600">
+            Sensor readings feed directly into the Early Risk Engine (F6, F16) to calculate real-time epidemic vulnerability.
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- 0. FARMER LOGIN & CURRENT LOCATION MODAL -->
+  <div id="modal-login" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-5 border border-slate-100 my-auto animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Brand & Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-700 to-emerald-500 flex items-center justify-center text-white shadow-lg shadow-brand-700/30">
+            <i data-lucide="sprout" class="w-7 h-7"></i>
+          </div>
+          <div>
+            <h2 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">किसान लॉगिन (Farmer Login)</h2>
+            <p class="text-xs text-slate-500">CropGuard AI Early Detection & Loss Prevention</p>
+          </div>
+        </div>
+        <button onclick="closeLoginModal()" id="btn-close-login" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Live GPS Current Location Card -->
+      <div class="bg-gradient-to-br from-emerald-50 to-brand-50/40 rounded-2xl p-4 border border-emerald-200 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span class="font-bold text-xs text-slate-800">Current GPS Farm Location (वर्तमान स्थान)</span>
+          </div>
+          <button type="button" onclick="detectUserLocation()" class="text-[11px] font-bold text-brand-700 hover:text-brand-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 shadow-sm flex items-center space-x-1">
+            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+            <span>Refresh GPS</span>
+          </button>
+        </div>
+
+        <div id="gps-status-card" class="bg-white/90 p-3 rounded-xl border border-emerald-200/60 flex items-center justify-between text-xs">
+          <div class="space-y-0.5">
+            <div class="font-black text-slate-900 text-sm flex items-center space-x-1.5" id="lbl-detected-place">
+              <i data-lucide="map-pin" class="w-4 h-4 text-emerald-600"></i>
+              <span>Detecting your location...</span>
+            </div>
+            <div class="text-[11px] text-slate-500 font-mono" id="lbl-detected-coords">
+              Lat: --.----, Lng: --.----
+            </div>
+          </div>
+          <span id="badge-gps-verified" class="hidden bg-emerald-100 text-emerald-800 text-[10px] font-black px-2.5 py-1 rounded-full border border-emerald-300">
+            ✓ GPS Active
+          </span>
+        </div>
+
+        <div class="text-[10px] text-slate-500 leading-tight flex items-start space-x-1.5">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5"></i>
+          <span>GPS coordinates are used for hyperlocal weather risk scoring & 1 km privacy-snapped outbreak radar (DPDP Act 2023).</span>
+        </div>
+      </div>
+
+      <!-- Login Form Inputs -->
+      <div class="space-y-3.5 text-xs">
+        
+        <!-- Farmer Name -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Farmer Full Name (किसान का नाम):</label>
+          <div class="relative">
+            <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+            <input type="text" id="login-farmer-name" value="Ramesh Patel" placeholder="e.g. Ramesh Patel" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 focus:outline-none font-semibold text-slate-800">
+          </div>
+        </div>
+
+        <!-- Mobile Number -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Mobile Number (मोबाइल नंबर):</label>
+          <div class="flex space-x-2">
+            <span class="bg-slate-100 border border-slate-300 rounded-xl px-3 py-2.5 font-bold text-slate-600 flex items-center space-x-1">
+              <span>🇮🇳</span>
+              <span>+91</span>
+            </span>
+            <input type="tel" id="login-phone" maxlength="10" value="9822012345" placeholder="10-digit mobile number" class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 focus:outline-none font-bold text-slate-800 tracking-wider">
+            <button type="button" onclick="requestLoginOtp()" id="btn-request-otp" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3.5 py-2.5 rounded-xl whitespace-nowrap transition shadow-sm">
+              Send OTP
+            </button>
+          </div>
+        </div>
+
+        <!-- OTP Input -->
+        <div id="otp-section" class="space-y-1">
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-slate-700">Enter 6-Digit OTP (ओटीपी दर्ज करें):</label>
+            <span class="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">Demo OTP: 123456</span>
+          </div>
+          <div class="relative">
+            <i data-lucide="key" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+            <input type="text" id="login-otp" maxlength="6" value="123456" placeholder="Enter 123456" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-500 focus:outline-none font-mono font-bold text-slate-800 tracking-widest text-center text-sm">
+          </div>
+        </div>
+
+        <!-- Privacy DPDP Consent -->
+        <div class="flex items-start space-x-2 pt-1">
+          <input type="checkbox" id="login-consent-check" checked class="w-4 h-4 text-brand-600 rounded mt-0.5 focus:ring-brand-500 cursor-pointer">
+          <label for="login-consent-check" class="text-[11px] text-slate-600 leading-tight cursor-pointer">
+            I consent to using my location for microclimate disease risk calculation and anonymized outbreak radar alerts in compliance with the <strong>DPDP Act 2023</strong>.
+          </label>
+        </div>
+
+        <!-- Big Submit Login Button -->
+        <button type="button" onclick="submitLogin()" id="btn-submit-login" class="w-full bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-700 hover:to-emerald-700 text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-brand-600/30 transition transform active:scale-[0.99] flex items-center justify-center space-x-2">
+          <i data-lucide="log-in" class="w-4 h-4"></i>
+          <span>Verify & Enter Farm Dashboard (लॉगिन करें)</span>
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. AI SECOND OPINION MODAL (F17) -->
+  <div id="modal-second-opinion" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scroll">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold">2</div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-base">AI Second Opinion (F17)</h3>
+            <p class="text-xs text-slate-500">Provide extra evidence to resolve uncertain diagnosis</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-second-opinion')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Step 1: Photo of Leaf Underside (निचली सतह)</label>
+          <div class="p-3 border-2 border-dashed border-slate-300 rounded-xl text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition" onclick="document.getElementById('underside-file-input').click()">
+            <i data-lucide="camera" class="w-6 h-6 mx-auto mb-1 text-slate-400"></i>
+            <span class="text-[11px] text-slate-600 font-medium">Capture or upload underside of affected leaf</span>
+            <input type="file" id="underside-file-input" class="hidden">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Step 2: Crop Growth Stage</label>
+          <select id="so-growth-stage" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs">
+            <option value="Seedling">Seedling (0-20 Days)</option>
+            <option value="Vegetative" selected>Vegetative Growth (21-45 Days)</option>
+            <option value="Flowering">Flowering Stage (46-70 Days)</option>
+            <option value="Fruiting">Fruiting & Harvest (71+ Days)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">Step 3: Check which symptoms you observe:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center space-x-2 p-2 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+              <input type="checkbox" name="so-symptom" value="ring" class="rounded text-brand-600" checked>
+              <span>Concentric target rings</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+              <input type="checkbox" name="so-symptom" value="yellow" class="rounded text-brand-600" checked>
+              <span>Yellow halo around spots</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+              <input type="checkbox" name="so-symptom" value="curl" class="rounded text-brand-600">
+              <span>Upward leaf curling</span>
+            </label>
+            <label class="flex items-center space-x-2 p-2 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+              <input type="checkbox" name="so-symptom" value="mold" class="rounded text-brand-600">
+              <span>White/gray mold on underside</span>
+            </label>
+          </div>
+        </div>
+
+        <button onclick="submitSecondOpinion()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          Re-Score Candidates (जांच पूर्ण करें)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. KISAN VOICE SOS MODAL (F18) -->
+  <div id="modal-voice-sos" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-900 text-base flex items-center space-x-2">
+          <i data-lucide="mic" class="w-5 h-5 text-red-600"></i>
+          <span>Kisan Voice SOS (Google Gemini Live)</span>
+        </h3>
+        <span class="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">✨ Live KVK AI</span>
+        <button onclick="closeModal('modal-voice-sos')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="flex flex-col items-center justify-center py-4 space-y-3">
+        <button id="btn-mic-listen" onclick="toggleVoiceRecording()" class="w-20 h-20 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-xl pulse-mic transition transform hover:scale-105">
+          <i data-lucide="mic" class="w-10 h-10"></i>
+        </button>
+        <span id="voice-recording-status" class="text-xs font-bold text-red-600 animate-pulse">Tap to speak in Hindi or English</span>
+      </div>
+
+      <!-- Quick Hindi Voice Presets -->
+      <div class="space-y-1.5">
+        <span class="text-[11px] font-semibold text-slate-500 block">Or pick common farmer voice question:</span>
+        <div class="space-y-1 text-xs">
+          <button onclick="simulateVoiceQuery('मेरे टमाटर के पत्तों पर काले गोल छल्लेदार धब्बे दिख रहे हैं और निचली पत्तियां सूख रही हैं')" class="w-full text-left p-2 rounded-lg bg-slate-50 hover:bg-brand-50 border border-slate-200 text-slate-700 transition">
+            🗣️ "टमाटर के पत्तों पर काले गोल छल्लेदार धब्बे दिख रहे हैं..."
+          </button>
+          <button onclick="simulateVoiceQuery('टमाटर के पौधे बौने रह गए हैं और पत्तियां ऊपर की तरफ मुड़ रही हैं')" class="w-full text-left p-2 rounded-lg bg-slate-50 hover:bg-brand-50 border border-slate-200 text-slate-700 transition">
+            🗣️ "पत्तियां ऊपर की तरफ मुड़ रही हैं और पौधे बौने हैं..."
+          </button>
+        </div>
+      </div>
+
+      <!-- Voice Response Output Card -->
+      <div id="voice-reply-card" class="hidden bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+        <div class="font-bold text-brand-800 flex items-center justify-between">
+          <span>AI Voice Assistant Reply:</span>
+          <button onclick="speakText(currentVoiceSpokenReply)" class="text-brand-600 hover:text-brand-800"><i data-lucide="volume-2" class="w-4 h-4"></i></button>
+        </div>
+        <p id="voice-reply-text" class="text-slate-700 leading-relaxed"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. VILLAGE OUTBREAK INJECTION MODAL (F23) -->
+  <div id="modal-village-sim" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="bg-amber-600 text-white text-xs px-2 py-0.5 rounded font-bold uppercase">Demo</span>
+          <h3 class="font-bold text-slate-900 text-base">Village Outbreak Simulation (F23)</h3>
+        </div>
+        <button onclick="closeModal('modal-village-sim')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Target Village / Cluster:</label>
+          <select id="sim-village" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+            <option value="Nashik Rural (Panchavati)" data-lat="20.015" data-lng="73.805">Nashik Rural (Panchavati, MH)</option>
+            <option value="Dindori Village" data-lat="20.082" data-lng="73.861">Dindori Village (MH)</option>
+            <option value="Niphad Grape & Tomato Belt" data-lat="20.075" data-lng="74.020">Niphad Belt (MH)</option>
+            <option value="Baramati Agriculture Cluster" data-lat="18.152" data-lng="74.577">Baramati Cluster (MH)</option>
+            <option value="Karnal Vegetable Zone" data-lat="29.685" data-lng="76.990">Karnal Zone (Haryana)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Select Pathogen to Inject:</label>
+          <select id="sim-disease" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+            <!-- Populated from DB diseases -->
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Report Intensity (Cluster Volume):</label>
+          <input type="range" id="sim-intensity" min="3" max="15" value="6" class="w-full accent-amber-500">
+          <div class="flex justify-between text-[10px] text-slate-500">
+            <span>Moderate (3 cases)</span>
+            <span>Severe Epidemic (15 cases)</span>
+          </div>
+        </div>
+
+        <button onclick="executeVillageSimulation()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          🚀 Inject Outbreak & Watch Radar Recolour
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. LOG SPRAY MODAL (F9) -->
+  <div id="modal-spray-log" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-900 text-base">Record Spray / Treatment (F9)</h3>
+        <button onclick="closeModal('modal-spray-log')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Product Name:</label>
+          <input type="text" id="spray-product-name" value="Indofil M-45 (Mancozeb 75% WP)" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Active Ingredient:</label>
+          <input type="text" id="spray-active-ingredient" value="Mancozeb 75% WP" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Dose Applied:</label>
+            <input type="text" id="spray-dose" value="2.5 g / L (500g in 200L)" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Cost (INR ₹):</label>
+            <input type="number" id="spray-cost" value="450" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+          </div>
+        </div>
+        <button onclick="submitSprayLog()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          Save Spray Record to Field History
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. NEW FIELD MODAL -->
+  <div id="modal-new-field" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-900 text-base">Add New Crop Field</h3>
+        <button onclick="closeModal('modal-new-field')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Field Name:</label>
+          <input type="text" id="new-field-name" placeholder="e.g. North Canal Plot" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Crop:</label>
+            <select id="new-field-crop" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Area (Acres):</label>
+            <input type="number" id="new-field-area" value="2.0" step="0.5" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+          </div>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Variety (Optional):</label>
+          <input type="text" id="new-field-variety" placeholder="e.g. Abhinav / US-440" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Sowing Date:</label>
+          <input type="date" id="new-field-date" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+        </div>
+        <button onclick="submitNewField()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          Create Field
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. NEW COMMUNITY POST MODAL -->
+  <div id="modal-community-post" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-900 text-base">Post SOS Crop Rescue Request</h3>
+        <button onclick="closeModal('modal-community-post')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Describe Symptoms in detail:</label>
+          <textarea id="comm-symptoms-text" rows="3" placeholder="टमाटर के पत्तों पर काले धब्बे दिख रहे हैं, कृपया उपाय बताएं..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5"></textarea>
+        </div>
+        <button onclick="submitCommunityPost()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          Post Request to Network
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STATUTORY LEGAL & COMPLIANCE FOOTER ================= -->
+  <footer class="bg-slate-900 text-slate-400 text-[11px] p-6 text-center border-t border-slate-800 mt-12 space-y-3">
+    <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-400">
+      <div class="flex items-center space-x-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+        <span class="font-semibold text-slate-200 text-xs">CropGuard Agronomic & Regulatory Compliance System</span>
+      </div>
+      <div class="flex items-center space-x-4 text-[10px] text-slate-400">
+        <span class="hover:text-emerald-400 transition cursor-pointer">DPDP Act 2023 Compliant</span>
+        <span>•</span>
+        <span class="hover:text-emerald-400 transition cursor-pointer">CIBRC India Registered</span>
+        <span>•</span>
+        <span class="hover:text-emerald-400 transition cursor-pointer">ICAR Package of Practices</span>
+      </div>
+    </div>
+    <div class="max-w-4xl mx-auto text-[10px] text-slate-500 leading-relaxed border-t border-slate-800/80 pt-3">
+      <strong>Statutory Notice & Liability Shield:</strong> Recommendations adhere to ICAR / CIBRC published packages of practices under the Indian Insecticides Act, 1968. Always verify local product label registrations, batch numbers, and consult a certified KVK agronomist before foliar chemical application. CropGuard and its creators accept no legal liability for crop damage, yield loss, or off-target drift. All photo metadata (EXIF GPS) is permanently stripped prior to storage.
+    </div>
+  </footer>
+
+  <!-- ================= CLIENT JAVASCRIPT ================= -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
